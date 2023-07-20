@@ -31,8 +31,6 @@ spec:
           value: {{.Values.dc | required "dc required" | quote}}
         - name: E_ENV
           value: {{.Values.env | required "env required" | quote }}
-        - name: E_OPT_TESTING_REGEXP
-          value: "networking.gke.io/load-balancer-type: \"Internal\""
 
 
     repoURL: https://github.com/sergeyignatov/Ops-Argo-Test
