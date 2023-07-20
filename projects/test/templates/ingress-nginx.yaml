@@ -1,0 +1,45 @@
+{{ $service := (split "." (base .Template.Name))._0 }}
+{{ $path := dir .Template.BasePath }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $service }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "-10"
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $service }}
+  project: default
+  source:
+    plugin:
+      name: helm-resolver
+      env:
+        - name: E_REPO_NAME
+          value: "oci"
+        - name: E_REPO_URL
+          value: "oci://us-docker.pkg.dev/high-codex-314318/helm-repo"
+        - name: E_CHART_NAME
+          value: "ingress-nginx"
+        - name: E_CHART_VERSION
+          value: {{ template "version" (dict "root" .Values "chart" $service)  }}
+        - name: E_DC
+          value: {{.Values.dc | required "dc required" | quote}}
+        - name: E_ENV
+          value: {{.Values.env | required "env required" | quote }}
+        - name: E_OPT_TESTING_REGEXP
+          value: "networking.gke.io/load-balancer-type: \"Internal\""
+
+
+    repoURL: https://github.com/sergeyignatov/Ops-Argo-Test
+    path: projects/{{ $path }}/values
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

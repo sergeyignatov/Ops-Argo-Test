@@ -1,0 +1,3 @@
+helm_versions:
+  ingress-nginx:
+    default: 4.6.0
