@@ -1,4 +1,7 @@
 global:
+  image:
+    repository: ttl.sh/argocd
+    tag: 24h
   podAnnotations:
     cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
 dex:
@@ -60,37 +63,6 @@ repoServer:
     requests:
       memory: 256Mi
       cpu: 128m
-  volumes:
-    - name: argocd-cmp-cm
-      configMap:
-        name: argocd-cmp-cm
-  extraContainers:
-    - name: helm-resolver
-      image: ttl.sh/argocd-plugin:24h
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 999
-      volumeMounts:
-        - mountPath: /var/run/argocd
-          name: var-files
-        - mountPath: /home/argocd/cmp-server/plugins
-          name: plugins
-        - mountPath: /home/argocd/cmp-server/config/plugin.yaml
-          subPath: helm-resolver.yaml
-          name: argocd-cmp-cm
-    - name: helm-entry
-      image: ttl.sh/argocd-plugin:24h
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 999
-      volumeMounts:
-        - mountPath: /var/run/argocd
-          name: var-files
-        - mountPath: /home/argocd/cmp-server/plugins
-          name: plugins
-        - mountPath: /home/argocd/cmp-server/config/plugin.yaml
-          subPath: helm-entry.yaml
-          name: argocd-cmp-cm
 configs:
   repositories:
     github-argo:
@@ -175,18 +147,3 @@ server:
         generate:
             command: [bash, -c]
             args: ["helm secrets template -n $ARGOCD_APP_NAMESPACE $(helm_params -env) $ARGOCD_APP_NAME ."]
-configs:
-  cmp:
-    create: true
-    plugins:
-      helm-resolver:
-        init:
-          command: [bash, -c]
-          args: ["/usr/local/bin/init.sh"]
-        generate:
-          command: [bash, -c]
-          args: ["/usr/local/bin/generate.sh"]
-      helm-entry:
-        generate:
-          command: [bash, -c]
-          args: ["helm secrets template -n $ARGOCD_APP_NAMESPACE $(/usr/local/bin/helm_params -prefix ARGOCD_ENV_E_ -env) $ARGOCD_APP_NAME ."]

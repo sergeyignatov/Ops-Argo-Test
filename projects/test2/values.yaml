@@ -2,4 +2,4 @@ helm_versions:
   ingress-nginx:
     default: 4.6.0
   argo-cd:
-    default: 5.51.6
+    default: 3.31.0
