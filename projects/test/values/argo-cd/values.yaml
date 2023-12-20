@@ -1,0 +1,149 @@
+global:
+  image:
+    repository: gcr.io/high-codex-314318/argocd
+    tag: v2.2.12.15
+  podAnnotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+dex:
+  podAnnotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+controller:
+  podAnnotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+    rules:
+      enabled: true
+      spec:
+        - alert: ArgoAppMissing
+          expr: |
+            absent(argocd_app_info)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "[ArgoCD] No reported applications"
+            description: >
+              ArgoCD has not reported any applications data for the past 15 minutes which
+              means that it must be down or not functioning properly.  This needs to be
+              resolved for this cloud to continue to maintain state.
+        - alert: ArgoAppNotSynced
+          expr: |
+            argocd_app_info{sync_status!="Synced"} == 1
+          for: 12h
+          labels:
+            severity: critical
+          annotations:
+            summary: "[{{`{{$labels.name}}`}}] Application not synchronized"
+            description: >
+              The application [{{`{{$labels.name}}`}} has not been synchronized for over
+              12 hours which means that the state of this cloud has drifted away from the
+              state inside Git.
+
+  args:
+    appResyncPeriod: "60"
+    statusProcessors: "30"
+    operationProcessors: "30"
+    repoServerTimeoutSeconds: "180"
+    selfHealTimeout: "5"
+  logLevel: debug
+  #extraArgs:
+  #    - "--kubectl-parallelism-limit"
+  #    - "40"
+repoServer:
+  podAnnotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 128m
+configs:
+  repositories:
+    github-argo:
+      url: https://github.com/AppLovin/Ops-Argo
+  knownHosts:
+    data:
+      ssh_known_hosts: |
+        github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+        github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+        github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
+server:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  staticAssets:
+    enabled: true
+  rbacConfig:
+    policy.default: role:readonly
+  config:
+    statusbadge.enabled: "true"
+
+    users.anonymous.enabled: "true"
+    resource.customizations: |-
+      autoscaling/HorizontalPodAutoscaler:
+        health.lua: |
+          hs = {}
+          hs.status = "Healthy"
+          hs.message = "Ignoring HPA Health Check"
+          return hs
+      apps/StatefulSet2:
+          health.lua: |
+              hs = {}
+              hs.status = "Progressing2"
+              hs.message = "Progressing2"
+              if obj.status ~= nil then
+                  if obj.status.updatedReplicas == obj.status.replicas then
+                      hs.status = "Healthy"
+                      hs.message = "StatefulSet is Running"
+                      return hs
+                  end
+                  file = io.open("/tmp/test.txt", "w")
+                  file:write(obj.metadata.name)
+                  file:close()
+                  if obj.status.readyReplicas ~= obj.status.replicas then
+                      hs.message = "StatefulSet degraded"
+                      return hs
+                  end
+
+              end
+              return hs
+      argoproj.io/Application2:
+          health.lua: |
+              hs = {}
+              hs.status = "Progressing"
+              hs.message = ""
+              if obj.status ~= nil then
+              if obj.status.health ~= nil then
+                  hs.status = obj.status.health.status
+                  if obj.status.health.message ~= nil then
+                  hs.message = obj.status.health.message
+                  end
+              end
+              end
+              return hs
+
+    repositories: |
+      - url: git@github.com:AppLovin/Ops-Argo.git
+        sshPrivateKeySecret:
+          name: argocd-repository-credentials
+          key: sshPrivateKey
+    configManagementPlugins: |
+      - name: helm-resolver
+        init:
+            command: [bash, -c]
+            args: ["/usr/local/bin/init.sh"]
+        generate:
+            command: [bash, -c]
+            args: ["/usr/local/bin/generate.sh"]
+
+      - name: helm-entry
+        generate:
+            command: [bash, -c]
+            args: ["helm secrets template -n $ARGOCD_APP_NAMESPACE $(helm_params -env) $ARGOCD_APP_NAME ."]
