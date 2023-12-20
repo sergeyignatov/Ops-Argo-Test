@@ -37,7 +37,7 @@ spec:
           value: {{.Values.dc | required "dc required" | quote}}
 
 
-    repoURL: git@github.com:AppLovin/Ops-Argo.git
+    repoURL: https://github.com/sergeyignatov/Ops-Argo-Test
     path: projects/{{ $path }}/values
   syncPolicy:
     automated:
